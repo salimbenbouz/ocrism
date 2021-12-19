@@ -1,5 +1,3 @@
-Vue.use(BootstrapVue);
-
 Vue.component('cdn-pr-form', {
     name: 'CdnPrForm',
     props: [
