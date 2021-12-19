@@ -2,7 +2,8 @@ Vue.component('cdn-pr-form', {
     name: 'CdnPrForm',
     props: [
     'table_id',
-    'api_key'
+    'api_key',
+    'sku'
     ],
     data: function() {
         return {
@@ -41,8 +42,12 @@ Vue.component('cdn-pr-form', {
 
      await this.getFieldsDataFromApi();
      await this.getRowsDataFromApi();
-     this.anchors = []
-     this.selectSKU(this.rowsResult[0]);
+     this.anchors = [];
+     if(this.sku != '' && this.rowsResult.map((e) => {return e.SKU }).indexOf(this.sku) != -1){
+        this.selectSKU(this.rowsResult[this.rowsResult.map((e) => {return e.SKU }).indexOf(this.sku)]);
+     }else{
+        this.selectSKU(this.rowsResult[0])
+     }
      this.fetchPriceDifferences()
  },
  methods: {
@@ -54,6 +59,7 @@ Vue.component('cdn-pr-form', {
                     //enable input
                     form_el.disabled = false
                     form_el.value = form_el.value.filter((e) => {return e.value != undefined})
+
                     //incase there is one possibility disabled input
                     if(form_el.value.length == 1){
                         form_el.disabled = true
@@ -69,49 +75,53 @@ Vue.component('cdn-pr-form', {
                            obj[form_el.label].value
                        }
 
-                       
-
                         //if column is part of form calculate the rest of possibilities
                         if(!this.ignored.includes(form_el.label)){
                            this.calcPossibilities(form_el.label)
                        }
                        
                    }
-
                }
                 //after filling all inputs form the data to get price
-                let tempFormData = []
-                for(let column of Object.keys(obj)){
-                    if(typeof obj[column] == 'object'){
-                        if(Array.isArray(obj[column])){
-                          tempFormData.push({
-                            id: obj.id,
-                            label: column,
-                            type: 'multiple_select',
-                            choice: obj[column][0].value
-                        })
-                      }else{
-                          tempFormData.push({
-                            id: obj.id,
-                            label: column,
-                            type: 'select',
-                            choice: obj[column].value
-                        })
-                      }
-                  }
-              }
+                let tempFormData = this.form.elements.map((e)=>{return {'id':e.id,'label':e.label,'type':e.type,'choice':e.choice} }).filter((e) => { return e.choice != '' || e.choice != [] }).filter((e) => {return !this.ignored.includes(e.label)})
+
                 //get the price
                 this.calcPrice(tempFormData)
+                var toRemove = [];
+                const button = document.querySelector('#add-to-cart');
+                 for (attr in button.attributes) {
+                      if (typeof button.attributes[attr] === 'object' &&
+                         typeof button.attributes[attr].name === 'string' &&
+                         (/^data-item-custom/).test(button.attributes[attr].name)) {
+                         // Unfortunately, we can not call removeAttr directly in here, since it
+                         // hurts the iteration.
+                         toRemove.push(button.attributes[attr].name);
+                      }
+                   }
+
+                   for (var i = 0; i < toRemove.length; i++) {
+                      button.removeAttribute(toRemove[i]);
+                   }
+                for(let index in this.form.elements){
+                    button.setAttribute('data-item-custom'+(index+1)+'-name', this.form.elements[index].label)
+                    button.setAttribute('data-item-custom'+(index+1)+'-type', 'readonly')
+                    button.setAttribute('data-item-custom'+(index+1)+'-value', this.form.elements[index].choice)
+                }
             }
 
         },
         fetchPriceDifferences(){
             for(form_el of this.form.elements){
                 for(let option of form_el.value){
-                    option.text = option.value
-                    if((parseFloat(option.price) - parseFloat(this.product.Price) ) > 0){
-                        option.text = option.text+' +('+(parseFloat(option.price) - parseFloat(this.product.Price))+'$)'
-                    }
+                    if(option.value){
+                        option.text = option.value
+                        if(parseFloat(option.price) && parseFloat(option.price) > this.product['Price']) {
+                            option.text = option.text+' ('+(parseFloat(option.price))+'$)'
+                        }
+                    }else{
+                        form_el.value.splice(form_el.value.indexOf(option), 1)
+                    }   
+                    
                 }
             }
         },
@@ -202,7 +212,6 @@ Vue.component('cdn-pr-form', {
                 //Filling the form elements concerned
                 for (let row of this.formResult) {
                     for (let key of Object.keys(row)) {
-
                         //If the row field is found in the form elements array
                         if (row[key] != undefined && this.form.elements.map((e) => { return e.label }).indexOf(key) > - 1) {
                             if(!this.anchors.includes(key)){
@@ -213,11 +222,15 @@ Vue.component('cdn-pr-form', {
 
                                         if(this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.map((e) => {return e.value}).indexOf(row[key].value) == -1){
                                              if(Array.isArray(row[key]) && this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.map((e) => {return e.value}).indexOf(row[key][0].value) == -1){
-                                                 this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({
-                                                    text: row[key][0].value,
-                                                    value: row[key][0].value,
-                                                    price: row['Price']
-                                                })
+                                                for(let opt of row[key]){
+                                                    if(opt != undefined){
+                                                        this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({
+                                                        text: opt.value,
+                                                        value: opt.value,
+                                                        price: row['Price']
+                                                        })
+                                                    } 
+                                                }
                                              }else{
                                                 this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({
                                                     text: row[key].value,
@@ -312,6 +325,8 @@ Vue.component('cdn-pr-form', {
             this.selectSKU(this.formResult[0]);
 
             this.fetchPriceDifferences();
+
+            this.form.elements.sort((a, b) => (a.order > b.order ? 1 : -1))
         },
         onSubmit(event) {
             event.preventDefault()
@@ -321,7 +336,10 @@ Vue.component('cdn-pr-form', {
             this.showLoader =true;
             this.product = {}
             let found = {};
-
+            if(this.formResult.length == 1){
+                found = this.formResult[0];
+            }else{
+             
             //Looping on filtered rows to get concerned price
             for (let row of this.formResult) {
                 let rowIsIncluded = false
@@ -349,7 +367,7 @@ Vue.component('cdn-pr-form', {
                     break;
                 }
             }
-
+            }
             this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf('SKU')].choice = found['SKU']
 
             //Found row
@@ -392,6 +410,7 @@ Vue.component('cdn-pr-form', {
                             disabled: false,
                             id: field.id,
                             choice: '',
+                            order: field.order,
                             value: field.select_options.map((e) => {
                                 return {
                                     text: e.value,
@@ -409,6 +428,7 @@ Vue.component('cdn-pr-form', {
                             id: field.id,
                             type: 'multiple_select',
                             disabled: false,
+                            order:field.order,
                             choice: '',
                             value: field.select_options.map((e) => {
                                 return {
@@ -428,6 +448,7 @@ Vue.component('cdn-pr-form', {
                             label: field.name,
                             type: 'select',
                             disabled: false,
+                            order: field.order,
                             id: field.id,
                             choice: '',
                             value: options.map((e) => {return {id: e.id, type: e.type,text : e.Name,value:e.Name}})
@@ -441,6 +462,7 @@ Vue.component('cdn-pr-form', {
                                 label: field.name,
                                 type: 'text',
                                 id: field.id,
+                                order: field.order,
                                 disabled: false,
                                 choice: '',
                                 value: ''
@@ -455,6 +477,7 @@ Vue.component('cdn-pr-form', {
                             label: "SKU",
                             type: 'text',
                             id: field.id,
+                            order:field.order,
                             disabled: false,
                             choice: '',
                             value: ''
@@ -494,11 +517,15 @@ Vue.component('cdn-pr-form', {
                            //Skip if element already exists
                            if(this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.map((e) => {return e.value}).indexOf(row[key].value) == -1){
                              if(Array.isArray(row[key]) && this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.map((e) => {return e.value}).indexOf(row[key][0].value) == -1){
-                                 this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({
-                                    text: row[key][0].value,
-                                    value: row[key][0].value,
-                                    price: row['Price']
-                                })
+                                 for(let opt of row[key]){
+                                                    if(opt != undefined){
+                                                        this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({
+                                                        text: opt.value,
+                                                        value: opt.value,
+                                                        price: row['Price']
+                                                        })
+                                                    } 
+                                                }
                              }else{
                                 this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({
                                     text: row[key].value,
@@ -597,10 +624,13 @@ required
 <div class="price"> <strong>Price</strong> : {{product.Price}} $ </div>
 <br>
 <div class="add">
-<button class="add-btn snipcart-add-item"
+<button 
+id="add-to-cart"
+class="add-btn snipcart-add-item"
 :data-item-id="product.id"
 :data-item-price="product.Price"
-:data-item-name="product.SKU" :disabled="!showPrice">
+:data-item-name="product.SKU"
+:disabled="!showPrice">
 Add to cart
 </button>
 </div>
