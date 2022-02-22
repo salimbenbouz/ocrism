@@ -56,7 +56,9 @@ Vue.component('cdn-pr-form', {
         }
        this.fetchPriceDifferences();
 
-       this.product_url = document.location.pathname + document.location.search
+       // this.product_url = document.location.pathname + document.location.search
+       this.product_url ='https://ver.reprocdn.com/v/'+ this.table_id +'/'+ this.product['id'];
+        
             this.product_id = parseInt(this.product['SKU'])
 
 },
@@ -400,7 +402,9 @@ methods: {
             this.fetchPriceDifferences();
 
             this.form.elements.sort((a, b) => (a.order > b.order ? 1 : -1))
-            this.product_url = document.location.pathname + document.location.search
+            // this.product_url = document.location.pathname + document.location.search
+            this.product_url ='https://ver.reprocdn.com/v/'+ this.table_id +'/'+ this.product['id'];
+            
             this.product_id = parseInt(this.product['SKU']);
             this.btn_key += 1
 
@@ -710,7 +714,7 @@ id="add-to-cart"
 class="button-green is-large w-button snipcart-add-item"
 :data-item-id="product.id"
 :data-item-price="product.Price"
-:data-item-url="'https://ver.reprocdn.com/v/'table_id'/'product.id"
+:data-item-url="product_url"
 :data-item-name="product.SKU"
 data-item-description="lorem ipsum dorem"
 data-item-image="https://i.etsystatic.com/12076327/r/il/3bbc43/2065551247/il_570xN.2065551247_3rzk.jpg"
