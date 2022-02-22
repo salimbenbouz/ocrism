@@ -8,10 +8,13 @@ Vue.component('cdn-pr-form', {
     data: function() {
         return {
             anchors: [],
+            btn_key: 0,
             showLoader: false,
             storedFormData: [],
             formMessage : '',
             ignored : ['SKU'],
+            product_id: "",
+            product_url: "",
             selectTypes: ['select', 'link_row'],
             showPrice : false,
             formResult: [],
@@ -29,7 +32,7 @@ Vue.component('cdn-pr-form', {
                     }]
                 }]
             },
-            fieldsUrl: 'https://api.reprocdn.com/api/database/fields/table/' + this.table_id,
+            fieldsUrl: 'https://api.reprocdn.com/api/database/fields/table/' + this.table_id + '/',
             rowsUrl: 'https://api.reprocdn.com/api/database/rows/table/' + this.table_id + '/?user_field_names=true',
             baseUrl: 'https://api.reprocdn.com/api/database/rows/table/',
             fieldsResult: [],
@@ -39,18 +42,71 @@ Vue.component('cdn-pr-form', {
         }
     },
     created: async function() {
+       let preselectedSKU = new URLSearchParams(window.location.search).get('sku');
 
-     await this.getFieldsDataFromApi();
-     await this.getRowsDataFromApi();
-     this.anchors = [];
-     if(this.sku != '' && this.rowsResult.map((e) => {return e.SKU }).indexOf(this.sku) != -1){
-        this.selectSKU(this.rowsResult[this.rowsResult.map((e) => {return e.SKU }).indexOf(this.sku)]);
-     }else{
-        this.selectSKU(this.rowsResult[0])
-     }
-     this.fetchPriceDifferences()
- },
- methods: {
+
+       await this.getFieldsDataFromApi();
+       await this.getRowsDataFromApi();
+       this.anchors = [];
+         if(preselectedSKU){
+            this.selectSKU(this.rowsResult[this.rowsResult.map((e) => {return e.SKU }).indexOf(preselectedSKU)]);
+        }else{
+            this.selectSKU(this.rowsResult[0])
+            this.insertParam('sku',this.rowsResult[0].SKU);
+        }
+       this.fetchPriceDifferences();
+
+       this.product_url = document.location.pathname + document.location.search
+            this.product_id = parseInt(this.product['SKU'])
+
+},
+methods: {
+    removeParam(key, sourceURL) {
+        var rtn = sourceURL.split("?")[0],
+            param,
+            params_arr = [],
+            queryString = (sourceURL.indexOf("?") !== -1) ? sourceURL.split("?")[1] : "";
+        if (queryString !== "") {
+            params_arr = queryString.split("&");
+            for (var i = params_arr.length - 1; i >= 0; i -= 1) {
+                param = params_arr[i].split("=")[0];
+                if (param === key) {
+                    params_arr.splice(i, 1);
+                }
+            }
+            if (params_arr.length) rtn = rtn + "?" + params_arr.join("&");
+        }
+        return rtn;
+    },
+     insertParam(key, value) {
+        key = encodeURIComponent(key);
+        value = encodeURIComponent(value);
+
+        // kvp looks like ['key1=value1', 'key2=value2', ...]
+        var kvp = document.location.search.substr(1).split('&');
+        let i=0;
+
+        for(; i<kvp.length; i++){
+            if (kvp[i].startsWith(key + '=')) {
+                let pair = kvp[i].split('=');
+                pair[1] = value;
+                kvp[i] = pair.join('=');
+                break;
+            }
+        }
+
+        if(i >= kvp.length){
+            kvp[kvp.length] = [key,value].join('=');
+        }
+
+        kvp[0] = kvp[0]+kvp[1]
+
+        let params =kvp[0] + kvp.slice(1, -1).join('&');
+       
+        console.log(params)
+        // reload page with new params
+        window.history.pushState("", "", document.URL+'?'+params );
+    },
     selectSKU(obj){
         if(obj != null){
             this.formMessage = ''
@@ -71,17 +127,19 @@ Vue.component('cdn-pr-form', {
                             this.form.elements[this.form.elements.map((e) => { return e.label}).indexOf(form_el.label)].choice =
                             obj[form_el.label][0].value
                         }else{
+                          if(typeof obj[form_el.label] == 'object'){
                            this.form.elements[this.form.elements.map((e) => { return e.label}).indexOf(form_el.label)].choice =
                            obj[form_el.label].value
                        }
-
+                   }
                         //if column is part of form calculate the rest of possibilities
                         if(!this.ignored.includes(form_el.label)){
-                           this.calcPossibilities(form_el.label)
-                       }
-                       
-                   }
-               }
+                         this.calcPossibilities(form_el.label)
+
+                     }
+
+                 }
+             }
                 //after filling all inputs form the data to get price
                 let tempFormData = this.form.elements.map((e)=>{return {'id':e.id,'label':e.label,'type':e.type,'choice':e.choice} }).filter((e) => { return e.choice != '' || e.choice != [] }).filter((e) => {return !this.ignored.includes(e.label)})
 
@@ -89,43 +147,44 @@ Vue.component('cdn-pr-form', {
                 this.calcPrice(tempFormData)
                 var toRemove = [];
                 const button = document.querySelector('#add-to-cart');
-                 for (attr in button.attributes) {
-                      if (typeof button.attributes[attr] === 'object' &&
-                         typeof button.attributes[attr].name === 'string' &&
-                         (/^data-item-custom/).test(button.attributes[attr].name)) {
+                for (attr in button.attributes) {
+                  if (typeof button.attributes[attr] === 'object' &&
+                   typeof button.attributes[attr].name === 'string' &&
+                   (/^data-item-custom/).test(button.attributes[attr].name)) {
                          // Unfortunately, we can not call removeAttr directly in here, since it
                          // hurts the iteration.
                          toRemove.push(button.attributes[attr].name);
-                      }
-                   }
+                     }
+                 }
 
-                   for (var i = 0; i < toRemove.length; i++) {
-                      button.removeAttribute(toRemove[i]);
-                   }
-                for(let index in this.form.elements){
-                    button.setAttribute('data-item-custom'+(index+1)+'-name', this.form.elements[index].label)
-                    button.setAttribute('data-item-custom'+(index+1)+'-type', 'readonly')
-                    button.setAttribute('data-item-custom'+(index+1)+'-value', this.form.elements[index].choice)
-                }
-            }
+                 for (var i = 0; i < toRemove.length; i++) {
+                  button.removeAttribute(toRemove[i]);
+              }
+              for(let index in this.form.elements){
+                button.setAttribute('data-item-custom'+(parseInt(index)+1)+'-name', this.form.elements[index].label)
+                button.setAttribute('data-item-custom'+(parseInt(index)+1)+'-type', 'readonly')
+                button.setAttribute('data-item-custom'+(parseInt(index)+1)+'-value', this.form.elements[index].choice)
 
-        },
-        fetchPriceDifferences(){
-            for(form_el of this.form.elements){
-                for(let option of form_el.value){
-                    if(option.value){
-                        option.text = option.value
-                        if(parseFloat(option.price) && parseFloat(option.price) > this.product['Price']) {
-                            option.text = option.text+' ('+(parseFloat(option.price))+'$)'
-                        }
-                    }else{
-                        form_el.value.splice(form_el.value.indexOf(option), 1)
-                    }   
-                    
-                }
             }
-        },
-        calcPossibilities(touched){
+        }
+
+    },
+    fetchPriceDifferences(){
+        for(form_el of this.form.elements){
+            for(let option of form_el.value){
+                if(option.value){
+                    option.text = option.value
+                    if(parseFloat(option.price) && parseFloat(option.price) > this.product['Price']) {
+                        option.text = option.text+' ('+(parseFloat(option.price))+'$)'
+                    }
+                }else{
+                    form_el.value.splice(form_el.value.indexOf(option), 1)
+                }   
+
+            }
+        }
+    },
+    calcPossibilities(touched){
 
                 //Building form data with user selection
                 let formData = this.form.elements.map((e)=>{return {'id':e.id,'label':e.label,'type':e.type,'choice':e.choice} }).filter((e) => { return e.choice != '' || e.choice != [] }).filter((e) => {return !this.ignored.includes(e.label)})
@@ -173,7 +232,7 @@ Vue.component('cdn-pr-form', {
                                 }
                                 
                             }else if(key == columnChoice.label && columnChoice.type == 'multiple_select'){
-                             if(row[key].map((e) => {return e.value}).includes(columnChoice.choice)){
+                               if(row[key].map((e) => {return e.value}).includes(columnChoice.choice)){
                                 counter += 1
                             }
                         }
@@ -200,7 +259,7 @@ Vue.component('cdn-pr-form', {
 
                                 //If the row field is found in the form elements array
                                 if (row[key] != undefined && this.form.elements.map((e) => { return e.label }).indexOf(key) > - 1) {
-                                   if(!this.anchors.includes(key)){
+                                 if(!this.anchors.includes(key)){
 
                                     this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].choice = ''
                                     this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value = []
@@ -220,42 +279,42 @@ Vue.component('cdn-pr-form', {
 
                                 this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].choice = ''
 
-                                        if(this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.map((e) => {return e.value}).indexOf(row[key].value) == -1){
-                                             if(Array.isArray(row[key]) && this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.map((e) => {return e.value}).indexOf(row[key][0].value) == -1){
-                                                for(let opt of row[key]){
-                                                    if(opt != undefined){
-                                                        this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({
-                                                        text: opt.value,
-                                                        value: opt.value,
-                                                        price: row['Price']
-                                                        })
-                                                    } 
-                                                }
-                                             }else{
-                                                this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({
-                                                    text: row[key].value,
-                                                    value: row[key].value,
-                                                    price: row['Price']
-                                                })
-                                             }
-                                            
-                                         }
-
-                                 } else if (this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].type === 'multiple_select'){
-                                    this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].choice = ''
-
-                                    for(let el of row[key]){
-                                      if(this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.map((e) => {return e.value}).indexOf(el.value) == -1){
-                                        this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({'text': el.value,'value': el.value, price: row['Price']})
+                                if(this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.map((e) => {return e.value}).indexOf(row[key].value) == -1){
+                                   if(Array.isArray(row[key]) && this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.map((e) => {return e.value}).indexOf(row[key][0].value) == -1){
+                                    for(let opt of row[key]){
+                                        if(opt != undefined){
+                                            this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({
+                                                text: opt.value,
+                                                value: opt.value,
+                                                price: row['Price']
+                                            })
+                                        } 
                                     }
+                                }else{
+                                    this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({
+                                        text: row[key].value,
+                                        value: row[key].value,
+                                        price: row['Price']
+                                    })
                                 }
+
+                            }
+
+                        } else if (this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].type === 'multiple_select'){
+                            this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].choice = ''
+
+                            for(let el of row[key]){
+                              if(this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.map((e) => {return e.value}).indexOf(el.value) == -1){
+                                this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({'text': el.value,'value': el.value, price: row['Price']})
                             }
                         }
                     }
-
                 }
-
             }
+
+        }
+
+    }
 
         //Else if user is going in downwards direction of form
     }else{
@@ -276,7 +335,7 @@ Vue.component('cdn-pr-form', {
                                     }
                                 }
                             }else if(key == columnChoice.label && columnChoice.type == 'multiple_select'){
-                               if(row[key].map((e) => {return e.value}).includes(columnChoice.choice)){
+                             if(row[key].map((e) => {return e.value}).includes(columnChoice.choice)){
                                 counter += 1
                             }
 
@@ -323,14 +382,28 @@ Vue.component('cdn-pr-form', {
             this.calcPossibilities(event.target.id);
 
             this.selectSKU(this.formResult[0]);
-
+            
+            if(this.formResult[0]){
+                var url = new URL(document.URL);
+                var search_params = url.searchParams;
+    
+                // new value of "id" is set to "101"
+                search_params.set('sku', this.formResult[0]['SKU']);
+    
+                // change the search property of the main url
+                url.search = search_params.toString();
+    
+                // the new url string
+                window.history.pushState("", "", url.toString()); 
+            }
+           
             this.fetchPriceDifferences();
 
             this.form.elements.sort((a, b) => (a.order > b.order ? 1 : -1))
-        },
-        onSubmit(event) {
-            event.preventDefault()
-            alert(JSON.stringify(this.form))
+            this.product_url = document.location.pathname + document.location.search
+            this.product_id = parseInt(this.product['SKU']);
+            this.btn_key += 1
+
         },
         calcPrice(data){
             this.showLoader =true;
@@ -339,7 +412,7 @@ Vue.component('cdn-pr-form', {
             if(this.formResult.length == 1){
                 found = this.formResult[0];
             }else{
-             
+
             //Looping on filtered rows to get concerned price
             for (let row of this.formResult) {
                 let rowIsIncluded = false
@@ -367,33 +440,35 @@ Vue.component('cdn-pr-form', {
                     break;
                 }
             }
-            }
-            this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf('SKU')].choice = found['SKU']
+        }
+        if(this.form.elements.map((e) => { return e.label }).indexOf('SKU') != -1){
+           this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf('SKU')].choice = found['SKU']
 
             //Found row
             this.product = found;
-            this.showPrice = true;
+        }
+        this.showPrice = true;
+        this.showLoader = false
+    },
+    async getTableContent(table_id){
+        this.showLoader = true
+        let result = []
+        await axios.get(this.baseUrl+table_id+'/?user_field_names=true', {
+            headers: {
+                Authorization: "Token " + this.api_key
+            }
+        })
+        .then(response => {
             this.showLoader = false
-        },
-        async getTableContent(table_id){
-            this.showLoader = true
-            let result = []
-            await axios.get(this.baseUrl+table_id+'/?user_field_names=true', {
-                headers: {
-                    Authorization: "Token " + this.api_key
-                }
-            })
-            .then(response => {
-                this.showLoader = false
-                result = response.data.results
-            })
-            .catch(error => {
-                this.showLoader = false
-                console.log(error)
-            })
-            return result
-        },
-        async constructForm(table_data) {
+            result = response.data.results
+        })
+        .catch(error => {
+            this.showLoader = false
+            console.log(error)
+        })
+        return result
+    },
+    async constructForm(table_data) {
 
             //Looping on fields of table
             for (let field of table_data) {
@@ -497,7 +572,7 @@ Vue.component('cdn-pr-form', {
 
                                 //If the row field is found in the form elements array
                                 if (row[key] != undefined && this.form.elements.map((e) => { return e.label }).indexOf(key) > - 1) {
-                                   if(!this.anchors.includes(key)){
+                                 if(!this.anchors.includes(key)){
 
                                     this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].choice = ''
                                     this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value = []
@@ -516,26 +591,26 @@ Vue.component('cdn-pr-form', {
                         if (this.selectTypes.indexOf(this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].type) != -1) {
                            //Skip if element already exists
                            if(this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.map((e) => {return e.value}).indexOf(row[key].value) == -1){
-                             if(Array.isArray(row[key]) && this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.map((e) => {return e.value}).indexOf(row[key][0].value) == -1){
-                                 for(let opt of row[key]){
-                                                    if(opt != undefined){
-                                                        this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({
-                                                        text: opt.value,
-                                                        value: opt.value,
-                                                        price: row['Price']
-                                                        })
-                                                    } 
-                                                }
-                             }else{
+                               if(Array.isArray(row[key]) && this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.map((e) => {return e.value}).indexOf(row[key][0].value) == -1){
+                                   for(let opt of row[key]){
+                                    if(opt != undefined){
+                                        this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({
+                                            text: opt.value,
+                                            value: opt.value,
+                                            price: row['Price']
+                                        })
+                                    } 
+                                }
+                            }else{
                                 this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({
                                     text: row[key].value,
                                     value: row[key].value,
                                     price: row['Price']
                                 })
-                             }
+                            }
                             
-                         }
-                     } else if (this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].type === 'multiple_select'){
+                        }
+                    } else if (this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].type === 'multiple_select'){
                         for(let el of row[key]){
                           if(this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.map((e) => {return e.value}).indexOf(el.value) == -1){
                             this.form.elements[this.form.elements.map((e) => { return e.label }).indexOf(key)].value.push({'text': el.value,'value': el.value, price: row['Price']})
@@ -553,16 +628,30 @@ Vue.component('cdn-pr-form', {
 
 
 },
+onSubmit(e){
+    e.preventDefault()
+},
 async getFieldsDataFromApi() {
     this.showLoader = true
+
+    axios.interceptors.response.use(response => {
+     return response;
+ }, error => {
+  if (error.response.status === 401) {
+    console.log(JSON.stringify(error.response))
+}
+return error;
+});
+
     await axios.get(this.fieldsUrl, {
         headers: {
-            Authorization: "Token " + this.api_key
+            'Authorization': `Token ${this.api_key}`
         }
     })
     .then(async response => {
         this.showLoader = false
         this.result = response.data
+        
         this.form.elements = []
         await this.constructForm(this.result)
     })
@@ -575,7 +664,8 @@ async getRowsDataFromApi() {
     this.showLoader = true
     await axios.get(this.rowsUrl, {
         headers: {
-            Authorization: "Token " + this.api_key
+            Authorization: "Token " + this.api_key,
+
         }
     })
     .then(response => {
@@ -593,16 +683,12 @@ async getRowsDataFromApi() {
 
 },
 template: `
-<b-container class="pl-5 pr-5" fluid>
-<b-row class="loader" v-show="showLoader">
-<b-spinner class="m-auto" variant="primary" type="grow"></b-spinner>
-</b-row>
-<b-row>
-<b-form class="mt-3" @change="onChange" @submit="onSubmit"  v-if="show">
+<div>
 <template v-for="(form_el, key) in form.elements">
 <template v-if="form_el.type == 'select' || form_el.type == 'multiple_select'">
-<b-form-group :id="'input-group-'+key" :label="form_el.label" :label-for="'input-'+key">
-<select class="form-control" :id="form_el.label" v-model="form_el.choice" size="md"
+<div class="input__component">
+<label :for="form_el.label" class="input__label">{{form_el.label}}</label>
+<select :id="form_el.label" :name="form_el.label" @change="onChange" :data-name="form_el.label" class="input__select w-select" v-model="form_el.choice" size="md"
 required
 :disabled="form_el.disabled"
 >
@@ -610,37 +696,30 @@ required
 <option :value="label.value"> {{label.text}} </option>
 </template>
 </select>
-</b-form-group>
 
-</template>
-</template>
-<div class="message"> {{ formMessage }} </div>
-
-<h4>Form Raw Data</h4>
-<div v-for="el in form.elements">
-<strong>{{el.label}}</strong> : {{el.choice}}
 </div>
-<hr>
+</template>
+</template>
+
 <div class="price"> <strong>Price</strong> : {{product.Price}} $ </div>
 <br>
 <div class="add">
 <button 
+:key="btn_key"
 id="add-to-cart"
-class="add-btn snipcart-add-item"
+class="button-green is-large w-button snipcart-add-item"
 :data-item-id="product.id"
 :data-item-price="product.Price"
+:data-item-url="'https://ver.reprocdn.com/v/'+this.table_id+'/'+product.id'"
 :data-item-name="product.SKU"
+data-item-description="lorem ipsum dorem"
+data-item-image="https://i.etsystatic.com/12076327/r/il/3bbc43/2065551247/il_570xN.2065551247_3rzk.jpg"
 :disabled="!showPrice">
 Add to cart
 </button>
 </div>
-<b-alert variant="success" :show="showPrice" >
-{{ product }}
-</b-alert>
 
-</b-form>
-</b-row>
-</b-container>
+</div>
 `
 })
 var app = new Vue({
